@@ -1,11 +1,11 @@
-function storeNewInmates() {
+function storeNewInmates_SLCSO() {
   var table = fetchInmateTable();
   if (table == null) {
     return;
   }
   var inmates = [];
   for (var i = 1; i < table.length; i++) {
-    inmates.push(parseInmate(table[i]));
+    inmates.push(parseInmate_SLCSO(table[i]));
   }
   var sheet = SpreadsheetApp.openById("1PL0ileBIJvWb2l6l4-1vI1elKIPoGdrW_DmWlSEDG-I").getSheetByName("Database");
   var data = sheet.getRange(1, 1, Math.min(sheet.getLastRow(), 500), 2).getValues();
@@ -20,22 +20,38 @@ function storeNewInmates() {
     sheet.getRange(2, 1, newData.length, newData[0].length).setValues(newData);
     sheet.sort(2, false);        
   }
-  profileUncheckedInmates();
-  pullUnstoredImages();
+  profileUncheckedInmates_SLCSO();
+  pullUnstoredImages_SLCSO();
 }
 
-function pullUnstoredImages() {
+
+
+function pullUnstoredImages_SLCSO() {
+  //http://www.stluciesheriff.com/inmate_photo.php?inmate_id=232772
   var sheet = SpreadsheetApp.openById("1PL0ileBIJvWb2l6l4-1vI1elKIPoGdrW_DmWlSEDG-I").getSheetByName("Database");
   var range = sheet.getRange(1, 1, Math.min(sheet.getLastRow(), 500), sheet.getLastColumn());
   var data = range.getValues();
   var folder = null;
   var count = 0;
   for (var i = 1; i < data.length && count < 10; i++) {
-    if (data[i][2] == "") {
+    if (data[i][2] != "yes") {
       var json = JSON.parse(data[i][4]);
-      if (json.image == undefined) {
-        data[i][2] = "no url";
-        continue;
+      if(json.image == undefined) {
+        var image_page = UrlFetchApp.fetch("http://www.stluciesheriff.com/inmate_photo.php?inmate_id=" + json.id);
+        var xml = Xml.parse(image_page.getContentText(), true);
+        if(!xml.html.body.table || !xml.html.body.table.tr[2].td[1].table) {
+          data[i][2] = increment(data[i][2]);
+          count++;
+          continue;
+        }
+        var image_url = xml.html.body.table.tr[2].td[1].table.tr[3].td.img.src;
+        if(image_url.indexOf("no_photo") != -1) {
+          data[i][2] = increment(data[i][2]);
+          count++;
+          continue;
+        }
+        json.image = image_url;
+        data[i][4] = JSON.stringify(json);
       }
       if (folder == null) {
         folder = DriveApp.getFolderById("0B0M5bT18YZDCWFZYWF9sWk5WdUk");
@@ -56,6 +72,7 @@ function pullUnstoredImages() {
         data[i][2] = code;
         continue;
       }
+      filename = filename + ".jpg";
       var blob = response.getAs(MimeType.JPEG).setName(filename);
       folder.createFile(blob);
       count++;
@@ -66,14 +83,14 @@ function pullUnstoredImages() {
   }
 }
 
-function profileUncheckedInmates() {
+function profileUncheckedInmates_SLCSO() {
   var sheet = SpreadsheetApp.openById("1PL0ileBIJvWb2l6l4-1vI1elKIPoGdrW_DmWlSEDG-I").getSheetByName("Database");
   var range = sheet.getRange(1, 1, Math.min(sheet.getLastRow(), 500), sheet.getLastColumn());
   var data = range.getValues();
   var count = 0;
   for (var i = 1; i < data.length && count < 20; i++) {
     if (data[i][3] != "yes") {
-      var new_profile = fetchInmateProfile(data[i][0]);
+      var new_profile = fetchInmateProfile_SLCSO(data[i][0]);
       var old_profile = JSON.parse(data[i][4]);
       var updated_profile = merge_options(old_profile, new_profile);
       if(new_profile == null) {
@@ -98,10 +115,10 @@ function increment(str) {
   }
   str = str.split(" ");
   var num = parseInt(str[1]);
-  if(num == 10) {
+  if(num == 20) {
     return "yes";
   }
-  if(num++ < 10) {
+  if(num++ < 20) {
     return "attempts: " + num;
   }
   return "";
@@ -162,13 +179,24 @@ function fetchInmateTable() {
   }
   var contentText = response.getContentText();
   if (contentText.indexOf("Could not Connect to Database") != -1) {
+    Logger.log("Could not connect to DB");
+    return null;
+  }
+  if (contentText.indexOf("currently performing maintenance") != -1) {
+    Logger.log("Maintenance ongoing");
     return null;
   }
   var xml = Xml.parse(contentText, true);
-  return xml.html.body.table.tr[2].td[1].table.tr[4].td.table.tr;
+  if(xml.html.body.table.tr[2].td[1].table.tr[4].td.table != undefined) {
+    return xml.html.body.table.tr[2].td[1].table.tr[4].td.table.tr;
+  }
+  if(xml.html.body.table.tr[2].td[1].table.tr[5].td.table != undefined) {
+    return xml.html.body.table.tr[2].td[1].table.tr[5].td.table.tr;
+  }
+  return null;
 }
 
-function fetchInmateProfile(id) {
+function fetchInmateProfile_SLCSO(id) {
   var url = "http://www.stluciesheriff.com/inmate_profile.php?inmate_id=" + id;
   var response = UrlFetchApp.fetch(url, {
     "muteHttpExceptions": true
@@ -178,12 +206,12 @@ function fetchInmateProfile(id) {
   }
   var xml = Xml.parse(response.getContentText(), true);
   var data = xml.html.body.table[0].tr[2].td[1].table.tr;
-  var profile = parseInmateProfile(data);
+  var profile = parseInmateProfile_SLCSO(data);
   Utilities.sleep(1000);
   return profile;
 }
 
-function parseInmateProfile(data) {
+function parseInmateProfile_SLCSO(data) {
   var names = parseNameString(data[3].td.strong.Text);
   if (names == null) {
     return null;
@@ -284,7 +312,7 @@ function parseTimeString(time) {
   return time;
 }
 
-function parseInmate(data) {
+function parseInmate_SLCSO(data) {
   var names = parseNameString(data.td[0].a.Text);
   var dob = parseDobString(data.td[1].Text);
   var time = parseTimeString(data.td[4].Text);

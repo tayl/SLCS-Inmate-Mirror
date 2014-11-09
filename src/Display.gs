@@ -9,7 +9,7 @@ function updateListing() {
   for(var i = 1; i < db_data.length; i++) {
     var data = JSON.parse(db_data[i][4]);
     if(db_data[i][2] == "yes") {
-      listing_data[i][0] = '=IMAGE("https://googledrive.com/host/0B0M5bT18YZDCWFZYWF9sWk5WdUk/' + data.id + '-' + data.time.unix + '",1)';
+      listing_data[i][0] = '=IMAGE("https://googledrive.com/host/0B0M5bT18YZDCWFZYWF9sWk5WdUk/' + data.id + '-' + data.time.unix + '.jpg",1)';
     } else {
       listing_data[i][0] = "no image available";
     }
